@@ -3,7 +3,7 @@ import groovy.util.ConfigSlurper
 import java.util.concurrent.TimeUnit
 
 println "websphere_start.groovy: Calculating mongoServiceHost..."
-websphereConfig = new ConfigSlurper().parse(new File("websphere.properties").toURL())
+websphereConfig = new ConfigSlurper().parse(new File("websphere-service.properties").toURL())
 
 println "websphere_start.groovy: waiting for ${websphereConfig.mongoService}..."
 
@@ -49,7 +49,9 @@ installScriptText=installScriptText.replace("APPLICATION_CONTEXT_ROOT","${websph
 println "Replacing APPLICATION_WAR_OR_EAR_NAME with ${websphereConfig.applicationWarOrEarName} in ${websphereConfig.newInstallAppScript} ..."
 installScriptText=installScriptText.replace("APPLICATION_WAR_OR_EAR_NAME","${websphereConfig.applicationWarOrEarName}") 
 println "Replacing APPLICATION_NAME with ${websphereConfig.applicationName} in ${websphereConfig.newInstallAppScript} ..."
-installScriptText=installScriptText.replace("APPLICATION_NAME","${websphereConfig.applicationName}") 
+installScriptText=installScriptText.replace("APPLICATION_NAME","${websphereConfig.applicationName}")
+println "Replacing ROOT_FOLDER with ${websphereConfig.rootFolder} in ${websphereConfig.newInstallAppScript} ..."
+installScriptText=installScriptText.replace("ROOT_FOLDER","${websphereConfig.rootFolder}") 
 installScriptFile.text=installScriptText
 
 

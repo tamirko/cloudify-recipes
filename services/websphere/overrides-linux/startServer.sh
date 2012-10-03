@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -x
 
 # All Rights Reserved * Licensed Materials - Property of IBM
 # 5724-I63, 5724-H88, 5655-N01, 5733-W60 (C) COPYRIGHT International Business Machines Corp., 1997,2005

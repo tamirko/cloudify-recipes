@@ -1,7 +1,7 @@
 import groovy.util.ConfigSlurper
 
 
-websphereConfig = new ConfigSlurper().parse(new File("websphere.properties").toURL())
+websphereConfig = new ConfigSlurper().parse(new File("websphere-service.properties").toURL())
 
 println "websphere_stop.groovy: Executing ${websphereConfig.stopScript} ..."
 

@@ -1,7 +1,7 @@
 import groovy.util.ConfigSlurper
 
 println "websphere_install.groovy: Installing..."
-websphereConfig = new ConfigSlurper().parse(new File("websphere.properties").toURL())
+websphereConfig = new ConfigSlurper().parse(new File("websphere-service.properties").toURL())
 
 println "websphere_install.groovy: Unzipping to folder ${websphereConfig.wasUnzippedFolder}"
 
@@ -64,7 +64,7 @@ new AntBuilder().sequential {
 		arg(value:"-silent")
 	}
 	
-	/*echo(message:"Chmodding ${websphereConfig.samplesDir} ...")
+	echo(message:"Chmodding ${websphereConfig.samplesDir} ...")
 	chmod(dir:"${websphereConfig.samplesDir}", perm:'+x', includes:"*")		
 	chmod(dir:"${websphereConfig.samplesDir}/bin", perm:'+x', includes:"*")
 	
@@ -74,7 +74,7 @@ new AntBuilder().sequential {
 		arg(value:"server1")
 		arg(value:"-samples")
 		arg(value:"AlbumCatalog")
-	} */	
+	}
 }
 
 println "websphere_install.groovy: Installation ended successfully"

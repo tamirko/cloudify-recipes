@@ -1,6 +1,6 @@
 import groovy.util.ConfigSlurper
 
-websphereConfig = new ConfigSlurper().parse(new File("websphere.properties").toURL())
+websphereConfig = new ConfigSlurper().parse(new File("websphere-service.properties").toURL())
 
 println "websphere_uninstall.groovy executing ${websphereConfig.uninstallScript}..."
 new AntBuilder().sequential {
