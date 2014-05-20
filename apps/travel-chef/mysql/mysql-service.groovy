@@ -1,5 +1,5 @@
 /*******************************************************************************
-* Copyright (c) 2011 GigaSpaces Technologies Ltd. All rights reserved
+* Copyright (c) 2012 GigaSpaces Technologies Ltd. All rights reserved
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -16,21 +16,6 @@
 import java.net.InetAddress 
 
 service {
-    extend "../../../services/chef"
+    extend "../../../services/chef-services/mysql-vanilla"
     name "mysql"
-    type "DATABASE"
-    icon "mysql.png"
-    numInstances 1
-
-    compute {
-        template "MEDIUM_LINUX"
-    }
-
-    lifecycle {
-        startDetectionTimeoutSecs 240
-        startDetection {
-            ServiceUtils.isPortOccupied(System.getenv()["CLOUDIFY_AGENT_ENV_PRIVATE_IP"], 3306)
-        }
-    }
-
 }

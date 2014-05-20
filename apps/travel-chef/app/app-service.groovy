@@ -1,5 +1,5 @@
 /*******************************************************************************
-* Copyright (c) 2011 GigaSpaces Technologies Ltd. All rights reserved
+* Copyright (c) 2012 GigaSpaces Technologies Ltd. All rights reserved
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ service {
 	maxAllowedInstances 2
 
     compute {
-        template "MEDIUM_LINUX"
+        template "SMALL_UBUNTU"
     }
 
     lifecycle {
@@ -63,20 +63,47 @@ service {
     	def instanceID = context.instanceId
     	
     	postStart {			
-			def apacheService = context.waitForService("apacheLB", 180, TimeUnit.SECONDS)						
-			def privateIP = System.getenv()["CLOUDIFY_AGENT_ENV_PRIVATE_IP"]
-			def currURL="http://${privateIP}:8080/${context.applicationName}"
+			def apacheService = context.waitForService("apacheLB", 180, TimeUnit.SECONDS)
+			def ipAddress = context.privateAddress
+            if (ipAddress == null || ipAddress.trim() == "") ipAddress = context.publicAddress
+			def currURL="http://${ipAddress}:8080/${context.applicationName}"
 			apacheService.invoke("addNode", currURL as String, instanceID as String)			                 
 		}
 		
 		postStop {
-			def apacheService = context.waitForService("apacheLB", 180, TimeUnit.SECONDS)			
-			def	privateIP =System.getenv()["CLOUDIFY_AGENT_ENV_PRIVATE_IP"]
-			def currURL="http://${privateIP}:8080/${context.applicationName}"
-			apacheService.invoke("removeNode", currURL as String, instanceID as String)
+			try { 	
+				def apacheService = context.waitForService("apacheLB", 180, TimeUnit.SECONDS)
+				if ( apacheService != null ) { 					
+					def ipAddress = context.privateAddress
+					if (ipAddress == null || ipAddress.trim() == "") ipAddress = context.publicAddress
+					def currURL="http://${ipAddress}:8080/${context.applicationName}"
+					apacheService.invoke("removeNode", currURL as String, instanceID as String)
+				}
+			}
+			catch (all) {		
+				println "app-service.groovy: Exception in Post-stop: " + all
+			} 
 		}
     	
     }
+	
+	customCommands ([
+		"updateWar" : {warUrl -> 
+			println "app-service.groovy(updateWar custom command): warUrl is ${warUrl}..."
+			if (! warUrl) return "warUrl is null. So we do nothing."
+			context.attributes.thisService["warUrl"] = "${warUrl}"
+			
+			println "app-service.groovy(updateWar customCommand): invoking updateWarFile custom command ..."
+			def service = context.waitForService(context.serviceName, 60, TimeUnit.SECONDS)
+			def currentInstance = service.getInstances().find{ it.instanceId == context.instanceId }
+			currentInstance.invoke("updateWarFile")
+			
+			println "app-service.groovy(updateWar customCommand): End"
+			return true
+		} ,
+		 
+		"updateWarFile" : "updateWarFile.groovy"
+	])
 
 	
 	userInterface {
@@ -191,7 +218,7 @@ service {
 	}
 	
 	
-	scaleCooldownInSeconds 180
+	scaleCooldownInSeconds 300
 	samplingPeriodInSeconds 1
 
 	// Defines an automatic scaling rule based on "Active Sessions" metric value
@@ -199,22 +226,20 @@ service {
 		scalingRule {
 
 			serviceStatistics {
-				metric "Active Sessions" 
-				statistics Statistics.averageOfAverages
+				metric "Current Http Threads Busy"
+				statistics Statistics.maximumOfMaximums
 				movingTimeRangeInSeconds 20
 			}
 
 			highThreshold {
-				value 2
+				value 10
 				instancesIncrease 1
 			}
 
-			/*
 			lowThreshold {
-				value 0
+				value 1
 				instancesDecrease 1
 			}
-			*/
 		}
 	])
 	

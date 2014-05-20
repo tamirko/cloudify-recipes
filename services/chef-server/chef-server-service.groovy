@@ -1,5 +1,5 @@
 /*******************************************************************************
-* Copyright (c) 2011 GigaSpaces Technologies Ltd. All rights reserved
+* Copyright (c) 2012 GigaSpaces Technologies Ltd. All rights reserved
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 *******************************************************************************/
 import static Shell.*
 import static ChefLoader
+import groovy.json.JsonOutput
 
 service {
     extend "../chef"
@@ -24,47 +25,54 @@ service {
 	numInstances 1
 
     compute {
-        template "MEDIUM_LINUX"
+		// Chef server does NOT support 32bit !!!
+        template "SMALL_UBUNTU"
     }
 
 	lifecycle{
         start {
-            def bootstrap = ChefBootstrap.getBootstrap(installFlavor:"gem", context:context)
-            def config = bootstrap.getConfig()
+            def ipAddress = context.privateAddress
+            if (ipAddress == null || ipAddress.trim() == "") ipAddress = context.publicAddress
+            def serverUrl = "https://${ipAddress}:443" as String
+            def bootstrap = ChefBootstrap.getBootstrap(installFlavor:"fatBinary", context:context)
+
+            def chefServerConfig = [:]
+            // If the chef-server isn't externally routable, we need to use privateIp
+            // (https://tickets.opscode.com/browse/CHEF-4086)
+            if (!externallyRoutableHostname) { // see properties file
+                chefServerConfig["bookshelf"] = ["url": serverUrl ]
+                chefServerConfig["nginx"]     = ["url": serverUrl ]
+                chefServerConfig["erchef"]    = ["s3_url_ttl": "21600"]
+            }
+
             bootstrap.runSolo([
-                "chef_server": [
-                    "server_url": "http://localhost:8080",
-                    "init_style": "${config.initStyle}"
+                "chef-server": [
+                    "version": "${chefServerVersion}", // defined in properties file
+                    "configuration": chefServerConfig
                 ],
-                "chef_packages": [
-                    "chef": [
-                        "version": "${config.version}"
-                    ]
-                ],
-                "run_list": ["recipe[build-essential]", "recipe[chef-server::rubygems-install]", "recipe[chef-server::apache-proxy]" ]
+                "run_list": ["recipe[chef-server]"]
             ])
 
-            //setting the global attributes to be available for all chef clients  
-            def privateIp = System.getenv()["CLOUDIFY_AGENT_ENV_PRIVATE_IP"]
-            def serverUrl = "http://${privateIp}:4000" as String
-            context.attributes.global["chef_validation.pem"] = sudoReadFile("/etc/chef/validation.pem")
-            context.attributes.global["chef_server_url"] = serverUrl
+            //setting the thisApplication attributes to be available for all chef clients in this application
+            context.attributes.thisApplication["chef_validation.pem"] = sudoReadFile("/etc/chef-server/chef-validator.pem")
+            context.attributes.thisApplication["chef_server_url"] = serverUrl
         }
-		
+
 		startDetectionTimeoutSecs 600
 		startDetection {
-			ServiceUtils.isPortOccupied(4000)
+			ServiceUtils.isPortOccupied(443)
 		}
+
 		details {
 			def publicIp = System.getenv()["CLOUDIFY_AGENT_ENV_PUBLIC_IP"]
 			def serverRestUrl = "https://${publicIp}:443"
-			def serverUrl = "http://${publicIp}:4000"
+			def serverUrl = "https://${publicIp}:443"
     		return [
     			"Rest URL":"<a href=\"${serverRestUrl}\" target=\"_blank\">${serverRestUrl}</a>",
     			"Server URL":"<a href=\"${serverUrl}\" target=\"_blank\">${serverUrl}</a>"
     		]
     	}
-        postStart { 
+        postStart {
             if (binding.variables["chefRepo"]) {
                 chef_loader = ChefLoader.get_loader(chefRepo.repo_type)
                 chef_loader.initialize()
@@ -80,13 +88,40 @@ service {
         "updateCookbooks": { repo_type="git",
                              url="by default, the existing repo will be reused",
                              inner_path=null ->
-            chef_loader = ChefLoader.get_loader(repo_type) 
+            chef_loader = ChefLoader.get_loader(repo_type)
             chef_loader.fetch(url, inner_path)
             chef_loader.upload()
         },
-        "cleanupCookbooks": { 
-            chef_loader = ChefLoader.get_loader() 
+        "cleanupCookbooks": {
+            chef_loader = ChefLoader.get_loader()
             chef_loader.cleanup_local_repo()
+        },
+        "listCookbooks": {
+            chef_loader = ChefLoader.get_loader()
+            return chef_loader.listCookbooks()
+        },
+        "cleanupNode": { String node_name ->
+            chef_loader = ChefLoader.get_loader()
+            chef_loader.invokeKnife(["node", "delete", node_name, "-y"])
+            chef_loader.invokeKnife(["client", "delete", node_name, "-y"])
+            return "${node_name} cleaned up"
+        },
+        "createNode": { String node_name ->
+            chef_loader = ChefLoader.get_loader()
+								
+            def jsonFileContent = "{ \"name\": \"${node_name}\", \"chef_environment\": \"_default\", \"json_class\": \"Chef::Node\", \"automatic\": { }, \"normal\": { }, \"chef_type\": \"node\", \"default\": { }, \"override\": { }, \"run_list\": [ ] }"
+            def currentNodeJsonFile = "/tmp/currentNode.json"
+            sudoWriteFile( "${currentNodeJsonFile}" ,jsonFileContent)
+				
+            def createNodeArgs = [ "node" , "from", "file", "${currentNodeJsonFile}" ]
+            println "creating Node ${node_name} : knife node from file ${currentNodeJsonFile} ..."
+            return chef_loader.invokeKnife(createNodeArgs)
+        },
+        "knife": { String... args=[] ->
+            chef_loader = ChefLoader.get_loader()
+            return chef_loader.invokeKnife(args)
         }
+
+
     ])
 }
